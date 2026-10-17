@@ -206,16 +206,28 @@ fn the_size_mode_switch_relays_the_map_out() {
 }
 
 #[test]
-fn the_cushion_toggle_rerasterises_without_relayout() {
+fn the_shading_switch_rerasterises_without_relayout() {
     let mut h = usb_map();
     assert_eq!(h.state.shading(), Shading::Cushion);
     let before = h.state.map_counters();
-    h.click(SHADING_ID);
+    // Four segments: Cushion, Flat, Bevel, City.
+    let (x, y) = h.point_in(SHADING_ID, 0.375, 0.5);
+    h.click_at(x, y);
     assert_eq!(h.state.shading(), Shading::Flat);
     let after = h.state.map_counters();
     assert_eq!(after.layouts, before.layouts);
     assert_eq!(after.rasters, before.rasters + 1);
-    h.click(SHADING_ID);
+    let (x, y) = h.point_in(SHADING_ID, 0.625, 0.5);
+    h.click_at(x, y);
+    assert_eq!(h.state.shading(), Shading::Bevel);
+    assert_eq!(h.state.map_counters().rasters, before.rasters + 2);
+    let (x, y) = h.point_in(SHADING_ID, 0.875, 0.5);
+    h.click_at(x, y);
+    assert_eq!(h.state.shading(), Shading::Cityscape);
+    assert_eq!(h.state.map_counters().layouts, before.layouts);
+    assert_eq!(h.state.map_counters().rasters, before.rasters + 3);
+    let (x, y) = h.point_in(SHADING_ID, 0.125, 0.5);
+    h.click_at(x, y);
     assert_eq!(h.state.shading(), Shading::Cushion);
 }
 

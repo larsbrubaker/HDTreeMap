@@ -5,6 +5,17 @@ All notable changes to HDTreeMap are documented here.
 ## Unreleased
 
 ### Added
+- A third shading style, **Bevel**: each file is a raised tile with an even fill, a light
+  rim along its top and left edges and a dark rim along the bottom and right, lit from the
+  upper left like the cushions but with hard edges. The toolbar's Cushions checkbox is now
+  a Cushion / Flat / Bevel switch, and View ▸ Cushion Shading is a View ▸ Shading submenu.
+  Settings store the style as `shading` (keeping `cushions` so 0.1.1 still reads them).
+- A fourth style, **City**: the map as a cityscape seen from above and a little to the
+  lower right. Every file is a building whose footprint is its rectangle less a street on
+  the right and bottom (wider along folder boundaries, so folders read as city blocks),
+  and whose height grows with the cube root of its size, so the space hogs stand up as
+  towers. Drawn in an oblique projection with shaded walls; hover, selection and hit
+  testing still use the footprint.
 - `run-windows.cmd`: the Windows counterpart of `run-mac.command`, a double-click
   launcher that builds a release binary and starts the app, passing its arguments through
   (`[PATH | --demo ID]`).
