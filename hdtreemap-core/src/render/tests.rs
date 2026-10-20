@@ -1,8 +1,11 @@
 //! Golden-invariant tests for the rasteriser on a small fixed tree at 64×48: every
 //! rectangle shows its palette colour, cushions are brighter toward the upper left, flat mode
-//! fills evenly with darker edges, and the palette's hue assignment. Pixel invariants rather
-//! than a stored image, so harmless tuning does not break them.
+//! fills evenly with darker edges, bevel mode rims each tile light and dark, and the
+//! palette's hue assignment. Pixel invariants rather than a stored image, so harmless
+//! tuning does not break them.
 
+use super::city;
+use super::raster::{to_byte, FLAT_EDGE_MIN, FLAT_INTENSITY};
 use super::*;
 use crate::layout::{layout, LayoutParams, LayoutRect, PxRect, RectKind, TreemapLayout};
 use crate::model::{ExtTable, NodeFlags, SizeMode, Sizes, Tree, TreeBuilder};
@@ -138,6 +141,221 @@ fn flat_mode_fills_evenly_with_darker_edges() {
         let edge = pixel(&buf, x1 - 1, a.1);
         assert!(luma(edge) < luma(pa), "right edge is darker");
     }
+}
+
+#[test]
+fn bevel_mode_has_a_light_top_left_rim_and_a_dark_bottom_right_rim() {
+    let (tree, palette, map) = fixture();
+    let buf = rasterise(&map, &tree, &palette, Shading::Bevel, W, H);
+    let flat = rasterise(&map, &tree, &palette, Shading::Flat, W, H);
+    let mut checked = 0;
+    for r in painted(&map) {
+        let (x0, x1) = r.rect.pixel_cols(W);
+        let (y0, y1) = r.rect.pixel_rows(H);
+        if x1 - x0 < 4 * BEVEL_WIDTH + 2 || y1 - y0 < 4 * BEVEL_WIDTH + 2 {
+            continue;
+        }
+        checked += 1;
+        let (cx, cy) = ((x0 + x1) / 2, (y0 + y1) / 2);
+        let centre = pixel(&buf, cx, cy);
+        assert_eq!(centre, pixel(&flat, cx, cy), "the fill matches flat mode");
+        assert_eq!(centre, pixel(&buf, cx + 1, cy + 1), "the fill is even");
+        let color = palette.rect_color(&tree, r);
+        // The rim is BEVEL_WIDTH deep: the pixel just inside it is fill.
+        for d in 0..BEVEL_WIDTH {
+            let top = pixel(&buf, cx, y0 + d);
+            let left = pixel(&buf, x0 + d, cy);
+            let bottom = pixel(&buf, cx, y1 - 1 - d);
+            let right = pixel(&buf, x1 - 1 - d, cy);
+            assert!(luma(top) > luma(centre), "top rim is lighter");
+            assert_eq!(top, left, "top and left rims match");
+            assert!(luma(bottom) < luma(centre), "bottom rim is darker");
+            assert_eq!(bottom, right, "bottom and right rims match");
+            // Lightening moves every channel towards white, so a dark channel still rises.
+            for c in 0..3 {
+                assert!(
+                    top[c] >= centre[c],
+                    "channel {c} of {color:?} is not darker"
+                );
+            }
+        }
+        assert_eq!(pixel(&buf, cx, y0 + BEVEL_WIDTH), centre);
+        assert_eq!(pixel(&buf, cx, y1 - 1 - BEVEL_WIDTH), centre);
+        // The top-left corner belongs to the light rim, the bottom-right to the dark one.
+        assert_eq!(pixel(&buf, x0, y0), pixel(&buf, cx, y0));
+        assert_eq!(pixel(&buf, x1 - 1, y1 - 1), pixel(&buf, cx, y1 - 1));
+    }
+    assert!(checked >= 2, "fixture has {checked} bevelled rectangles");
+}
+
+#[test]
+fn tiny_bevelled_rectangles_get_a_thin_rim_or_none() {
+    let (tree, palette, _) = fixture();
+    // Squeezed to a strip, so every rectangle is a few pixels tall at most.
+    let bounds = PxRect::new(0.0, 0.0, f64::from(W), 5.0);
+    let strip = layout(&tree, tree.root(), bounds, &LayoutParams::default());
+    let buf = rasterise(&strip, &tree, &palette, Shading::Bevel, W, 5);
+    for r in strip.rects().iter().filter(|r| r.kind.is_painted()) {
+        let (x0, x1) = r.rect.pixel_cols(W);
+        let (y0, y1) = r.rect.pixel_rows(5);
+        if x0 >= x1 || y0 >= y1 {
+            continue;
+        }
+        let colour = palette
+            .rect_color(&tree, r)
+            .map(|c| to_byte(c * FLAT_INTENSITY));
+        let (w, h) = (x1 - x0, y1 - y0);
+        let top_left = pixel(&buf, x0, y0);
+        if w.min(h) < FLAT_EDGE_MIN {
+            // Too small for a rim: plain fill.
+            assert_eq!(&top_left[..3], &colour[..]);
+        } else {
+            // A one-pixel rim: the next pixel in is already fill.
+            assert!(luma(top_left) > luma([colour[0], colour[1], colour[2], 255]));
+            if w >= 3 && h >= 3 {
+                assert_eq!(&pixel(&buf, x0 + 1, y0 + 1)[..3], &colour[..]);
+            }
+        }
+    }
+}
+
+/// `/r` with one file, so the building fills the raster less its streets.
+fn one_file() -> (Tree, Palette, TreemapLayout) {
+    let mut b = TreeBuilder::new("/r");
+    let root = b.root();
+    b.add_file(root, "big.mp4", Sizes::new(1000, 1000), NodeFlags::empty());
+    let tree = b.finish(SizeMode::Allocated);
+    let table = ExtTable::from_tree(&tree);
+    let palette = Palette::from_extensions(&table, SizeMode::Allocated, tree.ext_count());
+    let bounds = PxRect::new(0.0, 0.0, f64::from(W), f64::from(H));
+    let map = layout(&tree, tree.root(), bounds, &LayoutParams::default());
+    (tree, palette, map)
+}
+
+#[test]
+fn a_cityscape_building_has_a_raised_roof_two_walls_and_a_street() {
+    let (tree, palette, map) = one_file();
+    let buf = rasterise(&map, &tree, &palette, Shading::Cityscape, W, H);
+    let r = painted(&map)[0];
+    let color = palette.rect_color(&tree, r);
+    let roof = color.map(|c| to_byte(c * FLAT_INTENSITY));
+    let right = color.map(|c| to_byte(c * FLAT_INTENSITY * city::RIGHT_WALL));
+    let bottom = color.map(|c| to_byte(c * FLAT_INTENSITY * city::BOTTOM_WALL));
+    let background = palette.background();
+    let h = city::max_height(W, H);
+    assert_eq!(h, city::MIN_MAX_HEIGHT, "a 64×48 raster uses the minimum");
+    // The footprint is the rectangle less a one-pixel street right and bottom; the zoom
+    // root's own edges add no street.
+    let (x1, y1) = (W as f32 - city::STREET, H as f32 - city::STREET);
+    // The bottom-right corner is street (ground).
+    assert_eq!(pixel(&buf, W - 1, H - 1), background);
+    // The roof is the footprint moved up and left by the rise.
+    let (ox, oy) = (h * city::RISE[0], h * city::RISE[1]);
+    let roof_at = |fx: f32, fy: f32| pixel(&buf, (fx + ox) as u32, (fy + oy) as u32);
+    assert_eq!(&roof_at(x1 / 2.0, y1 / 2.0)[..3], &roof[..]);
+    assert_eq!(
+        &roof_at(x1 - 1.0, y1 - 1.0)[..3],
+        &roof[..],
+        "roof's bottom-right"
+    );
+    // Top-left of the raster: the roof moved off the edge, so only roof remains there.
+    assert_eq!(&pixel(&buf, 0, 0)[..3], &roof[..]);
+    // Straight below the roof's bottom edge lies the bottom wall, then the street.
+    let under_roof = (y1 + oy) as u32 + 1;
+    assert_eq!(&pixel(&buf, W / 2, under_roof)[..3], &bottom[..]);
+    assert_eq!(&pixel(&buf, W / 2, H - 2)[..3], &bottom[..]);
+    // Right of the roof's right edge lies the right wall (where it is not under the
+    // bottom wall's parallelogram).
+    let beside_roof = (x1 + ox) as u32 + 1;
+    assert_eq!(&pixel(&buf, beside_roof, H / 2)[..3], &right[..]);
+    // The walls are darker than the roof, the bottom darkest.
+    assert!(luma([roof[0], roof[1], roof[2], 255]) > luma([right[0], right[1], right[2], 255]));
+    assert!(
+        luma([right[0], right[1], right[2], 255]) > luma([bottom[0], bottom[1], bottom[2], 255])
+    );
+}
+
+#[test]
+fn bigger_files_make_taller_buildings_and_streets_widen_at_folder_edges() {
+    let (tree, palette, map) = fixture();
+    let buf = rasterise(&map, &tree, &palette, Shading::Cityscape, W, H);
+    let background = palette.background();
+    let indices: Vec<usize> = map
+        .rects()
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.kind.is_painted())
+        .map(|(i, _)| i)
+        .collect();
+    let buildings = city::plan(&map, &tree, &indices, W, H);
+    // movie.mp4 (5000) is the biggest and reaches the full height; a.jpg (1500) is lower
+    // by the cube root of the ratio; nothing is taller than the biggest.
+    let by_name = |name: &str| {
+        indices
+            .iter()
+            .zip(&buildings)
+            .find(|(&i, _)| tree.name(map.rects()[i].node) == name)
+            .map(|(_, b)| *b)
+            .expect(name)
+    };
+    let movie = by_name("movie.mp4");
+    let a = by_name("a.jpg");
+    assert_eq!(movie.height, city::max_height(W, H));
+    let expected = movie.height * (1500.0f64 / 5000.0).cbrt() as f32;
+    assert!(
+        (a.height - expected).abs() < 1e-3,
+        "{} vs {expected}",
+        a.height
+    );
+    assert!(buildings.iter().all(|b| b.height <= movie.height));
+    // a.jpg sits inside photos/: where its edge is also the folder's, the street is wider
+    // than a plain one, and inside the folder it is a plain street.
+    let photos = map
+        .rects()
+        .iter()
+        .find(|r| r.kind == RectKind::Dir && r.depth == 1)
+        .expect("photos/ rect");
+    let a_rect = map.rects()[map.index_of(tree_node(&tree, "a.jpg")).expect("a.jpg")].rect;
+    let right_street = a_rect.right() as f32 - a.x1;
+    let bottom_street = a_rect.bottom() as f32 - a.y1;
+    let on_folder_right = (photos.rect.right() - a_rect.right()).abs() < 1e-6;
+    let on_folder_bottom = (photos.rect.bottom() - a_rect.bottom()).abs() < 1e-6;
+    let plain = city::STREET;
+    let wide = city::STREET + city::STREET_PER_FOLDER;
+    assert_eq!(right_street, if on_folder_right { wide } else { plain });
+    assert_eq!(bottom_street, if on_folder_bottom { wide } else { plain });
+    // Somewhere in the raster the ground shows between buildings.
+    let ground = (0..H)
+        .flat_map(|y| (0..W).map(move |x| (x, y)))
+        .filter(|&(x, y)| pixel(&buf, x, y) == background)
+        .count();
+    assert!(ground > 0, "streets show");
+    // Nothing is lit beyond a roof: every pixel is ground or no brighter than the
+    // brightest roof.
+    let brightest = indices
+        .iter()
+        .map(|&i| {
+            let [r, g, b] = palette
+                .rect_color(&tree, &map.rects()[i])
+                .map(|v| to_byte(v * FLAT_INTENSITY));
+            luma([r, g, b, 255])
+        })
+        .max()
+        .expect("buildings");
+    for y in 0..H {
+        for x in 0..W {
+            let p = pixel(&buf, x, y);
+            assert!(p == background || luma(p) <= brightest);
+        }
+    }
+}
+
+/// The node called `name` (unique in the fixtures).
+fn tree_node(tree: &Tree, name: &str) -> crate::model::NodeId {
+    (0..tree.arena_len())
+        .map(|i| crate::model::NodeId(i as u32))
+        .find(|&id| tree.node(id).is_some() && tree.name(id) == name)
+        .expect(name)
 }
 
 #[test]
