@@ -23,7 +23,11 @@ jobs:
       # against the latest agg-gui sources. See CLAUDE.md.
       - name: Clone agg-gui sibling
         shell: bash
-        run: git clone --depth 1 https://github.com/larsbrubaker/agg-gui.git ../agg-gui
+        run: |
+          git clone --depth 1 https://github.com/larsbrubaker/agg-gui.git ../agg-gui
+          # agg-gui path-depends on its own siblings, agg-rust and tess2-rust.
+          git clone --depth 1 https://github.com/larsbrubaker/agg-rust.git ../agg-rust
+          git clone --depth 1 https://github.com/larsbrubaker/tess2-rust.git ../tess2-rust
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -49,7 +53,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Clone agg-gui sibling
-        run: git clone --depth 1 https://github.com/larsbrubaker/agg-gui.git ../agg-gui
+        run: |
+          git clone --depth 1 https://github.com/larsbrubaker/agg-gui.git ../agg-gui
+          # agg-gui path-depends on its own siblings, agg-rust and tess2-rust.
+          git clone --depth 1 https://github.com/larsbrubaker/agg-rust.git ../agg-rust
+          git clone --depth 1 https://github.com/larsbrubaker/tess2-rust.git ../tess2-rust
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

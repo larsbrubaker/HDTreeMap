@@ -16,7 +16,12 @@ where cargo >nul 2>nul
 if errorlevel 1 if exist "%USERPROFILE%\.cargo\bin\cargo.exe" set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
 
 where cargo >nul 2>nul || goto no_cargo
-if not exist "..\agg-gui\" goto no_agg_gui
+set "HDTREEMAP_SIBLING=agg-gui"
+if not exist "..\agg-gui\" goto no_sibling
+set "HDTREEMAP_SIBLING=agg-rust"
+if not exist "..\agg-rust\" goto no_sibling
+set "HDTREEMAP_SIBLING=tess2-rust"
+if not exist "..\tess2-rust\" goto no_sibling
 
 echo Building HDTreeMap (release)...
 cargo build --release -p hdtreemap-native || goto build_failed
@@ -29,8 +34,8 @@ exit /b %errorlevel%
 set "HDTREEMAP_FAIL=cargo was not found. Install Rust from https://rustup.rs and try again."
 goto fail
 
-:no_agg_gui
-set "HDTREEMAP_FAIL=..\agg-gui was not found. Clone https://github.com/larsbrubaker/agg-gui beside this folder (or use the rust-apps superproject)."
+:no_sibling
+set "HDTREEMAP_FAIL=..\%HDTREEMAP_SIBLING% was not found. Clone https://github.com/larsbrubaker/%HDTREEMAP_SIBLING% beside this folder (or use the rust-apps superproject)."
 goto fail
 
 :build_failed

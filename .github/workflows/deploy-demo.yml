@@ -25,7 +25,11 @@ jobs:
       # Sibling agg-gui checkout — required by [patch.crates-io] and the agg-gui-web-shell
       # path dependency in Cargo.toml. See CLAUDE.md.
       - name: Clone agg-gui sibling
-        run: git clone --depth 1 https://github.com/larsbrubaker/agg-gui.git ../agg-gui
+        run: |
+          git clone --depth 1 https://github.com/larsbrubaker/agg-gui.git ../agg-gui
+          # agg-gui path-depends on its own siblings, agg-rust and tess2-rust.
+          git clone --depth 1 https://github.com/larsbrubaker/agg-rust.git ../agg-rust
+          git clone --depth 1 https://github.com/larsbrubaker/tess2-rust.git ../tess2-rust
 
       - uses: dtolnay/rust-toolchain@stable
         with:

@@ -117,7 +117,8 @@ Widgets never ask "am I on the web?" through `cfg`; they ask the platform (`is_d
 `Cargo.toml` patches `agg-gui` and `agg-gui-shell` to the sibling checkout `../agg-gui/`,
 and `agg-gui-web-shell` is a path dependency there. When HDTreeMap needs a capability
 agg-gui lacks, add it to agg-gui itself (then Lars publishes a new version) — never a
-local workaround. CI clones agg-gui beside the repo so the paths resolve there too.
+local workaround. CI clones agg-gui (and its own path-dependency siblings, agg-rust and tess2-rust)
+beside the repo so the paths resolve there too.
 
 ## Build and test
 

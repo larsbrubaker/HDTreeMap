@@ -141,11 +141,15 @@ borrows no code from them. See [docs/PLAN.md](docs/PLAN.md) for the design.
 
 You need a Rust toolchain (1.95 or newer). The workspace expects
 [agg-gui](https://github.com/larsbrubaker/agg-gui) checked out next to this repository
-(`../agg-gui`), as it is in the `rust-apps` superproject:
+(`../agg-gui`), with its own siblings [agg-rust](https://github.com/larsbrubaker/agg-rust)
+and [tess2-rust](https://github.com/larsbrubaker/tess2-rust), as in the `rust-apps`
+superproject:
 
 ```sh
 git clone https://github.com/larsbrubaker/HDTreeMap.git
 git clone https://github.com/larsbrubaker/agg-gui.git
+git clone https://github.com/larsbrubaker/agg-rust.git
+git clone https://github.com/larsbrubaker/tess2-rust.git
 cd HDTreeMap
 cargo run --release             # start screen
 cargo run --release -- ~/Code   # open straight on a folder

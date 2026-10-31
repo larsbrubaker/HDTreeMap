@@ -4,8 +4,8 @@
 # few minutes; later launches only rebuild what changed. Arguments are passed through to
 # the app, e.g. `./run-mac.command ~/Downloads` or `./run-mac.command --demo laptop-ssd`.
 #
-# The build expects the agg-gui checkout beside this repo (../agg-gui), as in the
-# rust-apps superproject; see README "Build from source".
+# The build expects the agg-gui, agg-rust and tess2-rust checkouts beside this repo, as in
+# the rust-apps superproject; see README "Build from source".
 
 set -u
 cd "$(dirname "$0")" || exit 1
@@ -23,7 +23,9 @@ fail() {
 }
 
 command -v cargo >/dev/null 2>&1 || fail "cargo was not found. Install Rust from https://rustup.rs and try again."
-[ -d ../agg-gui ] || fail "../agg-gui was not found. Clone https://github.com/larsbrubaker/agg-gui beside this folder (or use the rust-apps superproject)."
+for sibling in agg-gui agg-rust tess2-rust; do
+    [ -d "../$sibling" ] || fail "../$sibling was not found. Clone https://github.com/larsbrubaker/$sibling beside this folder (or use the rust-apps superproject)."
+done
 
 echo "Building HDTreeMap (release)..."
 cargo build --release -p hdtreemap-native || fail "the build failed (see the errors above)."
