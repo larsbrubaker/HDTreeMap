@@ -26,9 +26,9 @@ keywords = ["disk-usage", "treemap", "du", "gui", "agg-gui"]
 categories = ["filesystem", "visualization", "gui"]
 
 [workspace.dependencies]
-agg-gui = "0.5.1"
+agg-gui = "0.5.3"
 # Published native shell (winit event loop + wgpu present + input plumbing).
-agg-gui-shell = "0.5.2"
+agg-gui-shell = "0.6.0"
 # Turn-key browser shell. Not published to crates.io yet, so it is a path dependency on the
 # sibling agg-gui checkout (CI clones it there too).
 agg-gui-web-shell = { path = "../agg-gui/agg-gui-web-shell" }
