@@ -30,13 +30,15 @@ pub const GB: u64 = 1024 * 1024 * 1024;
 /// A scripted machine: fixed volumes, a folder picker that answers `picked`, scans that
 /// stream the small demo USB stick at its realistic pace (about 1.5 s), and OS actions that
 /// are recorded in `calls` (`"reveal /path"`, `"open /path"`, `"trash /path"`,
-/// `"list_volumes"`) and succeed unless `trash_error` is set.
+/// `"delete /path"`, `"list_volumes"`) and succeed unless `trash_error` (Move to Trash) or
+/// `delete_error` (Delete Permanently) is set.
 pub struct FakePlatform {
     pub volumes: Vec<VolumeInfo>,
     pub picked: Option<PathBuf>,
     pub pick_calls: Rc<Cell<u32>>,
     pub calls: Rc<RefCell<Vec<String>>>,
     pub trash_error: Option<String>,
+    pub delete_error: Option<String>,
     pub pace: DemoPace,
 }
 
@@ -66,6 +68,13 @@ impl PlatformServices for FakePlatform {
     fn trash(&self, path: &Path) -> ActionResult {
         self.record(format!("trash {}", path.display()));
         match &self.trash_error {
+            Some(message) => Err(PlatformError::new(message.clone())),
+            None => Ok(ActionOutcome::Done),
+        }
+    }
+    fn delete_permanently(&self, path: &Path) -> ActionResult {
+        self.record(format!("delete {}", path.display()));
+        match &self.delete_error {
             Some(message) => Err(PlatformError::new(message.clone())),
             None => Ok(ActionOutcome::Done),
         }
@@ -102,6 +111,7 @@ pub fn fake(volumes: Vec<VolumeInfo>, picked: Option<&str>) -> (FakePlatform, Rc
         pick_calls: Rc::clone(&calls),
         calls: Rc::new(RefCell::new(Vec::new())),
         trash_error: None,
+        delete_error: None,
         pace: DemoPace::Realistic,
     };
     (platform, calls)

@@ -97,6 +97,16 @@ pub fn trash_shortcut() -> &'static str {
     }
 }
 
+/// Delete Permanently's shortcut: Option+Cmd+Backspace on a Mac (as the Finder's Delete
+/// Immediately), Shift+Delete elsewhere (as Explorer and WinDirStat).
+pub fn delete_shortcut() -> &'static str {
+    if current_platform() == Platform::MacOS {
+        "Ctrl+Alt+Backspace"
+    } else {
+        "Shift+Delete"
+    }
+}
+
 /// The menu bar. `native_mac` lays it out for the macOS system bar: an application menu
 /// first holding About and Quit, which then leave Help and File.
 pub fn menu_bar_spec(commands: &Commands, native_mac: bool) -> Vec<TopMenuSpec> {
@@ -175,6 +185,12 @@ pub fn menu_bar_spec(commands: &Commands, native_mac: bool) -> Vec<TopMenuSpec> 
             Command::Trash,
             Some(trash_shortcut()),
             Some(fa::TRASH),
+        ),
+        item(
+            "Delete Permanently\u{2026}",
+            Command::Delete,
+            Some(delete_shortcut()),
+            Some(fa::TIMES_CIRCLE),
         ),
     ];
 
@@ -361,7 +377,8 @@ pub fn shortcuts(commands: &Commands) -> Vec<(MenuShortcut, Command)> {
     out
 }
 
-/// The right-click menu of `node`: every node action, with the trash after a separator.
+/// The right-click menu of `node`: every node action, with Move to Trash and Delete
+/// Permanently after a separator.
 pub fn context_entries(nodes: &NodeActions, node: NodeId) -> Vec<MenuEntry> {
     let mut out = Vec::new();
     for action in NodeAction::ALL {

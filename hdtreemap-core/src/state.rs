@@ -44,7 +44,7 @@ use web_time::Instant;
 
 pub use edits::RescanStatus;
 pub use live::{live_interval_for, LIVE_INTERVAL_MAX, LIVE_INTERVAL_MIN, LIVE_SHARE};
-pub use notices::{ContextRequest, MAX_TOASTS};
+pub use notices::{ContextRequest, Removal, MAX_TOASTS};
 pub use pump::{install_scan_pump, pump_scans, FRAME_BUDGET};
 pub use view::{Hover, MapCounters, SIDE_SPLIT_DEFAULT, TREE_SPLIT_DEFAULT};
 

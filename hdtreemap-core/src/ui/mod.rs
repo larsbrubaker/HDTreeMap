@@ -2,7 +2,8 @@
 //!
 //! The root ([`build_root`]) is a `Stack`: the app column (the in-window menu bar, unless
 //! the shell installed a native one, over the current screen), then the overlays: the
-//! context-menu host and the Move to Trash and About sheets. All of it sits in
+//! context-menu host and the removal (Move to Trash / Delete Permanently) and About
+//! sheets. All of it sits in
 //! [`menus::CommandKeys`], which runs the menu commands' shortcuts, inside agg-gui's
 //! `ToastHost`, which paints the state's toasts (`AppState::notify`) over everything in
 //! the bottom-right corner, clear of the status bar. The screen is a
@@ -102,7 +103,7 @@ pub fn build_root(
             commands.nodes().clone(),
             Arc::clone(&fonts.ui),
         )))
-        .add(sheets::trash_sheet(&commands, &fonts))
+        .add(sheets::removal_sheet(&commands, &fonts))
         .add(sheets::about_sheet(&commands, &fonts));
     let keys = menus::CommandKeys::new(Box::new(stack), commands);
     Box::new(

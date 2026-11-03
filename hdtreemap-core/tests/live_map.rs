@@ -1,7 +1,7 @@
 //! Headless tests of the live map (`state/live.rs`): while a scan runs the results view
 //! shows the partial tree and refreshes it on live ticks (the tree version bumps, the map
-//! re-rasterises, the legend fills); hover, tooltips and zoom work on it, while Rescan and
-//! Move to Trash wait; the finished tree is exactly what a scan run straight to the end
+//! re-rasterises, the legend fills); hover, tooltips and zoom work on it, while Rescan,
+//! Move to Trash and Delete Permanently wait; the finished tree is exactly what a scan run straight to the end
 //! makes, the view is not rebuilt when it lands, and Cancel goes back to the start screen.
 
 mod common;
@@ -176,6 +176,11 @@ fn hover_tooltips_and_zoom_work_while_scanning_but_trash_and_rescan_wait() {
         "trash waits for the scan"
     );
     assert!(!commands.nodes().enabled(file, NodeAction::Trash));
+    assert!(
+        !commands.enabled(Command::Delete),
+        "delete waits for the scan"
+    );
+    assert!(!commands.nodes().enabled(file, NodeAction::Delete));
     assert!(!commands.nodes().enabled(file, NodeAction::Rescan));
     assert!(commands.nodes().enabled(file, NodeAction::CopyPath));
     assert!(commands.enabled(Command::SizeMode(SizeMode::Apparent)));

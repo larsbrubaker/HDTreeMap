@@ -136,6 +136,10 @@ impl PlatformServices for DemoPlatform {
         Ok(ActionOutcome::Simulated(SIMULATED_MESSAGE.to_string()))
     }
 
+    fn delete_permanently(&self, _path: &Path) -> ActionResult {
+        Ok(ActionOutcome::Simulated(SIMULATED_MESSAGE.to_string()))
+    }
+
     /// The demo platform itself opens no browser; the web shell wraps it to open links
     /// in a new tab.
     fn open_url(&self, url: &str) -> ActionResult {
@@ -217,6 +221,7 @@ mod tests {
             p.reveal(Path::new("/demo/x")),
             p.open(Path::new("/demo/x")),
             p.trash(Path::new("/demo/x")),
+            p.delete_permanently(Path::new("/demo/x")),
         ] {
             assert!(matches!(result, Ok(ActionOutcome::Simulated(_))));
         }

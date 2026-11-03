@@ -1,11 +1,12 @@
 //! The app's two modal sheets (agg-gui `ModalSheet`s, placed late in the root `Stack` so
 //! they cover everything while open):
 //!
-//! - **Move to Trash** confirmation: the item's name, size and item count, and what will
-//!   happen ("This moves it to the Trash/Recycle Bin. You can restore it from there.").
-//!   Cancel (or Escape) closes it; "Move to Trash" (or Enter) runs
-//!   `NodeActions::confirm_trash`. Its content rebuilds for each request
-//!   (`AppState::sheet_version`).
+//! - the **removal** confirmation, for Move to Trash and Delete Permanently: the item's
+//!   name, size and item count, and what will happen ("This moves it to the Trash/Recycle
+//!   Bin. You can restore it from there." or, for a delete, that it skips the trash and
+//!   cannot be undone). Cancel (or Escape) closes it; "Move to Trash" / "Delete
+//!   Permanently" (or Enter) runs `NodeActions::confirm_removal`. Its content rebuilds for
+//!   each request (`AppState::sheet_version`), so it is worded for the kind asked for.
 //! - **About HDTreeMap**: version, licence and a link to the project on GitHub.
 
 use std::rc::Rc;
@@ -21,41 +22,48 @@ use crate::fonts::{fa, Fonts};
 use crate::format::{format_bytes, format_count};
 use crate::model::NodeId;
 use crate::platform::ActionOutcome;
-use crate::state::AppState;
+use crate::state::{AppState, Removal};
 use crate::APP_TITLE;
 
-/// Widget id of the trash confirmation's content.
-pub const TRASH_SHEET_ID: &str = "trash-sheet";
-/// Widget id of the trash confirmation's "Move to Trash" button.
-pub const TRASH_CONFIRM_ID: &str = "trash-confirm";
-/// Widget id of the trash confirmation's Cancel button.
-pub const TRASH_CANCEL_ID: &str = "trash-cancel";
-/// Widget id of the trash confirmation's description of the item.
-pub const TRASH_DETAILS_ID: &str = "trash-details";
+/// Widget id of the removal confirmation's content.
+pub const REMOVE_SHEET_ID: &str = "remove-sheet";
+/// Widget id of the removal confirmation's title (the question).
+pub const REMOVE_TITLE_ID: &str = "remove-title";
+/// Widget id of the removal confirmation's "Move to Trash" / "Delete Permanently" button.
+pub const REMOVE_CONFIRM_ID: &str = "remove-confirm";
+/// Widget id of the removal confirmation's Cancel button.
+pub const REMOVE_CANCEL_ID: &str = "remove-cancel";
+/// Widget id of the removal confirmation's description of the item.
+pub const REMOVE_DETAILS_ID: &str = "remove-details";
+/// Widget id of the removal confirmation's explanation of what will happen.
+pub const REMOVE_EXPLANATION_ID: &str = "remove-explanation";
 /// Widget id of the About sheet's content.
 pub const ABOUT_SHEET_ID: &str = "about-sheet";
 /// Widget id of the About sheet's Close button.
 pub const ABOUT_CLOSE_ID: &str = "about-close";
 
-/// What the confirmation says will happen.
+/// What the confirmation says Move to Trash will do.
 pub const TRASH_EXPLANATION: &str =
     "This moves it to the Trash/Recycle Bin. You can restore it from there.";
+/// What the confirmation says Delete Permanently will do.
+pub const DELETE_EXPLANATION: &str =
+    "This deletes it from the disk without using the Trash/Recycle Bin. It cannot be undone.";
 
-/// The Move to Trash confirmation sheet.
-pub fn trash_sheet(commands: &Commands, fonts: &Fonts) -> Box<dyn Widget> {
+/// The removal confirmation sheet (Move to Trash or Delete Permanently).
+pub fn removal_sheet(commands: &Commands, fonts: &Fonts) -> Box<dyn Widget> {
     let state = commands.state().clone();
     let version_state = state.clone();
     let build_commands = commands.clone();
     let build_fonts = fonts.clone();
     let content = Rebuilder::new(
         move || version_state.sheet_version(),
-        move || trash_content(&build_commands, &build_fonts),
+        move || removal_content(&build_commands, &build_fonts),
     );
     let cancel_state = state.clone();
     Box::new(
-        ModalSheet::new(state.trash_sheet(), Box::new(content))
+        ModalSheet::new(state.removal_sheet(), Box::new(content))
             .with_panel_size(Size::new(460.0, 250.0))
-            .with_on_close(move || cancel_state.cancel_trash()),
+            .with_on_close(move || cancel_state.cancel_removal()),
     )
 }
 
@@ -93,9 +101,11 @@ fn item_count(state: &AppState, node: NodeId) -> String {
         .unwrap_or_default()
 }
 
-fn trash_content(commands: &Commands, fonts: &Fonts) -> Box<dyn Widget> {
+fn removal_content(commands: &Commands, fonts: &Fonts) -> Box<dyn Widget> {
     let state = commands.state().clone();
-    let node = state.trash_request();
+    let request = state.removal_request();
+    let node = request.map(|(node, _)| node);
+    let how = request.map_or(Removal::Trash, |(_, how)| how);
     let (name, size) = node
         .and_then(|n| state.with_result(|r, _| (r.tree.name(n).to_string(), r.tree.size(n))))
         .unwrap_or_default();
@@ -106,36 +116,49 @@ fn trash_content(commands: &Commands, fonts: &Fonts) -> Box<dyn Widget> {
     let cancel_state = state.clone();
     let cancel = Button::new("Cancel", Arc::clone(&fonts.ui))
         .with_cancel_action()
-        .on_click(move || cancel_state.cancel_trash())
-        .with_name(TRASH_CANCEL_ID);
+        .on_click(move || cancel_state.cancel_removal())
+        .with_name(REMOVE_CANCEL_ID);
+    let (icon, title, button, explanation) = match how {
+        Removal::Trash => (
+            fa::TRASH,
+            format!("Move \u{201c}{name}\u{201d} to the Trash?"),
+            "Move to Trash",
+            TRASH_EXPLANATION,
+        ),
+        Removal::Delete => (
+            fa::TIMES_CIRCLE,
+            format!("Delete \u{201c}{name}\u{201d} permanently?"),
+            "Delete Permanently",
+            DELETE_EXPLANATION,
+        ),
+    };
     let confirm_commands = commands.clone();
-    let confirm = Button::new("Move to Trash", Arc::clone(&fonts.ui))
-        .with_icon(fa::TRASH, Arc::clone(&fonts.icons))
+    let confirm = Button::new(button, Arc::clone(&fonts.ui))
+        .with_icon(icon, Arc::clone(&fonts.icons))
         .with_default_action()
-        .on_click(move || confirm_commands.nodes().confirm_trash())
-        .with_name(TRASH_CONFIRM_ID);
+        .on_click(move || confirm_commands.nodes().confirm_removal())
+        .with_name(REMOVE_CONFIRM_ID);
     let mut column = FlexColumn::new()
         .with_gap(10.0)
         .with_inner_padding(Insets::all(20.0))
         .with_top_anchor(true)
         .add(Box::new(
-            Label::new(
-                format!("{}  Move \u{201c}{name}\u{201d} to the Trash?", fa::TRASH),
-                Arc::clone(&fonts.ui),
-            )
-            .with_font_size(16.0)
-            .with_strong(true),
+            Label::new(format!("{icon}  {title}"), Arc::clone(&fonts.ui))
+                .with_font_size(16.0)
+                .with_strong(true)
+                .with_name(REMOVE_TITLE_ID),
         ))
         .add(Box::new(
             Label::new(details, Arc::clone(&fonts.ui))
                 .with_font_size(14.0)
-                .with_name(TRASH_DETAILS_ID),
+                .with_name(REMOVE_DETAILS_ID),
         ))
         .add(Box::new(
-            Label::new(TRASH_EXPLANATION, Arc::clone(&fonts.ui))
+            Label::new(explanation, Arc::clone(&fonts.ui))
                 .with_font_size(13.0)
                 .with_wrap(true)
-                .with_h_anchor(HAnchor::STRETCH),
+                .with_h_anchor(HAnchor::STRETCH)
+                .with_name(REMOVE_EXPLANATION_ID),
         ));
     if commands.platform().is_demo() {
         column = column.add(Box::new(
@@ -160,7 +183,7 @@ fn trash_content(commands: &Commands, fonts: &Fonts) -> Box<dyn Widget> {
         column
             .add_flex(Box::new(Spacer::new()), 1.0)
             .add(Box::new(buttons))
-            .with_name(TRASH_SHEET_ID),
+            .with_name(REMOVE_SHEET_ID),
     )
 }
 

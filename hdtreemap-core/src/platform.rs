@@ -1,7 +1,7 @@
 //! The contract between the app and the operating system.
 //!
 //! Everything the UI needs from the platform (mounted volumes, a folder picker, reveal /
-//! open / trash) goes through [`PlatformServices`], so the core stays free of platform code
+//! open / trash / permanent delete) goes through [`PlatformServices`], so the core stays free of platform code
 //! and the same widgets run natively and in the browser:
 //!
 //! - `hdtreemap-native` implements it with the real OS (sysinfo, rfd, opener, trash). The
@@ -94,6 +94,10 @@ pub trait PlatformServices {
     fn open(&self, path: &Path) -> ActionResult;
     /// Move `path` to the system trash (never a permanent delete).
     fn trash(&self, path: &Path) -> ActionResult;
+    /// Delete `path` for good, skipping the trash: a file, or a folder and everything in
+    /// it. A symbolic link is removed itself, never what it points to. A folder can fail
+    /// part-way, with some of its contents already gone.
+    fn delete_permanently(&self, path: &Path) -> ActionResult;
     /// Open `url` (a web page: Help ▸ View on GitHub) in the user's browser.
     fn open_url(&self, url: &str) -> ActionResult;
     /// True for the browser demo's simulated machine.

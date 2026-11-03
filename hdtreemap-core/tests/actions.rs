@@ -25,7 +25,7 @@ use hdtreemap_core::ui::node_actions::{
     COPIED_MESSAGE, LOSSY_NAME_MESSAGE, SIMULATED_TRASH_MESSAGE, TRASH_ROOT_MESSAGE,
 };
 use hdtreemap_core::ui::sheets::{
-    TRASH_CANCEL_ID, TRASH_CONFIRM_ID, TRASH_DETAILS_ID, TRASH_SHEET_ID,
+    REMOVE_CANCEL_ID, REMOVE_CONFIRM_ID, REMOVE_DETAILS_ID, REMOVE_SHEET_ID,
 };
 use hdtreemap_core::ui::treemap_view::TREEMAP_ID;
 
@@ -87,7 +87,8 @@ fn right_clicking_the_map_opens_the_menu_and_its_items_reach_the_platform() {
             "Zoom Here",
             "Zoom to Parent",
             "Rescan Folder",
-            "Move to Trash\u{2026}"
+            "Move to Trash\u{2026}",
+            "Delete Permanently\u{2026}"
         ]
     );
     // The menu opens at the click.
@@ -108,7 +109,10 @@ fn right_clicking_the_map_opens_the_menu_and_its_items_reach_the_platform() {
         .into_iter()
         .map(|(_, e)| e)
         .collect();
-    assert_eq!(enabled, vec![true, true, true, false, true, false, true]);
+    assert_eq!(
+        enabled,
+        vec![true, true, true, false, true, false, true, true]
+    );
 
     h.choose(reveal);
     assert!(!h.context_menu().is_open());
@@ -250,11 +254,11 @@ fn move_to_trash_asks_first_then_updates_totals_tree_and_legend() {
     // Cancel: nothing happens.
     h.right_click_at(x, y);
     h.choose("Move to Trash\u{2026}");
-    assert!(h.visible(TRASH_SHEET_ID), "the confirmation opens");
-    let details = h.label_text(TRASH_DETAILS_ID);
+    assert!(h.visible(REMOVE_SHEET_ID), "the confirmation opens");
+    let details = h.label_text(REMOVE_DETAILS_ID);
     assert!(details.contains("1 file"), "{details}");
-    h.click(TRASH_CANCEL_ID);
-    assert!(!h.visible(TRASH_SHEET_ID));
+    h.click(REMOVE_CANCEL_ID);
+    assert!(!h.visible(REMOVE_SHEET_ID));
     assert!(calls.borrow().is_empty());
     assert!(h
         .state
@@ -265,15 +269,15 @@ fn move_to_trash_asks_first_then_updates_totals_tree_and_legend() {
     h.right_click_at(x, y);
     h.choose("Move to Trash\u{2026}");
     h.key(Key::Escape);
-    assert!(!h.visible(TRASH_SHEET_ID));
+    assert!(!h.visible(REMOVE_SHEET_ID));
     assert!(calls.borrow().is_empty());
 
     // Confirm: trashed through the platform and gone from the tree.
     h.right_click_at(x, y);
     h.choose("Move to Trash\u{2026}");
     let path = path_of(&h.state, file);
-    h.click(TRASH_CONFIRM_ID);
-    assert!(!h.visible(TRASH_SHEET_ID));
+    h.click(REMOVE_CONFIRM_ID);
+    assert!(!h.visible(REMOVE_SHEET_ID));
     assert_eq!(*calls.borrow(), vec![format!("trash {path}")]);
     assert!(!h
         .state
@@ -306,7 +310,7 @@ fn a_failed_trash_is_reported_and_changes_nothing() {
     let (x, y, file) = map_point(&mut h, is_file);
     h.right_click_at(x, y);
     h.choose("Move to Trash\u{2026}");
-    h.click(TRASH_CONFIRM_ID);
+    h.click(REMOVE_CONFIRM_ID);
     assert!(h
         .state
         .with_result(|r, _| r.tree.is_live(file))
@@ -333,7 +337,7 @@ fn the_scan_root_cannot_be_trashed() {
         (Key::Delete, agg_gui::Modifiers::default())
     };
     h.key_with(delete.0, delete.1);
-    assert!(!h.visible(TRASH_SHEET_ID));
+    assert!(!h.visible(REMOVE_SHEET_ID));
     assert!(calls.borrow().is_empty());
     assert!(
         h.toasts().contains(&TRASH_ROOT_MESSAGE.to_string()),
@@ -400,7 +404,7 @@ fn inexact_names_are_refused() {
     h.right_click_at(x, y);
     h.choose("Move to Trash\u{2026}");
     assert!(
-        !h.visible(TRASH_SHEET_ID),
+        !h.visible(REMOVE_SHEET_ID),
         "no confirmation for an inexact name"
     );
     h.right_click_at(x, y);
@@ -479,7 +483,7 @@ fn the_demo_trash_removes_from_the_simulated_tree_only() {
         .collect();
     assert_eq!(labels[0], "Reveal (demo)");
     h.choose("Move to Trash\u{2026}");
-    h.click(TRASH_CONFIRM_ID);
+    h.click(REMOVE_CONFIRM_ID);
     assert!(!h
         .state
         .with_result(|r, _| r.tree.is_live(file))

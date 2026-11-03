@@ -12,6 +12,11 @@
 //! - **Move to Trash…** asks first ([`ui::sheets`](super::sheets)); confirming calls
 //!   `PlatformServices::trash` and then removes the item from the tree. The scan root and
 //!   inexact names are refused.
+//! - **Delete Permanently…** (WinDirStat's delete that skips the Recycle Bin) asks first in
+//!   the same sheet, worded for a delete that cannot be undone; confirming calls
+//!   `PlatformServices::delete_permanently` and removes the item from the tree. A folder
+//!   that fails part-way may have lost some of its contents, so it is rescanned to show what
+//!   is left. The same refusals apply.
 //!
 //! Results are reported in toasts (`AppState::notify`).
 
@@ -22,7 +27,7 @@ use crate::fonts::fa;
 use crate::format::format_bytes;
 use crate::model::{NodeFlags, NodeId};
 use crate::platform::{ActionOutcome, ActionResult, PlatformServices};
-use crate::state::{AppState, ScanTarget, Screen};
+use crate::state::{AppState, Removal, ScanTarget, Screen};
 
 /// What the app says when it refuses to act on an inexact name.
 pub const LOSSY_NAME_MESSAGE: &str =
@@ -30,7 +35,9 @@ pub const LOSSY_NAME_MESSAGE: &str =
 /// What the app says when asked to trash the scanned folder itself.
 pub const TRASH_ROOT_MESSAGE: &str =
     "The scanned folder itself can't be moved to the Trash from here.";
-/// The toast after a simulated (web demo) Move to Trash.
+/// What the app says when asked to delete the scanned folder itself.
+pub const DELETE_ROOT_MESSAGE: &str = "The scanned folder itself can't be deleted from here.";
+/// The toast after a simulated (web demo) Move to Trash or Delete Permanently.
 pub const SIMULATED_TRASH_MESSAGE: &str = "Simulated: nothing was deleted";
 /// The toast after Copy Path.
 pub const COPIED_MESSAGE: &str = "Copied path";
@@ -48,11 +55,12 @@ pub enum NodeAction {
     ZoomToParent,
     Rescan,
     Trash,
+    Delete,
 }
 
 impl NodeAction {
     /// Every action, in menu order.
-    pub const ALL: [NodeAction; 7] = [
+    pub const ALL: [NodeAction; 8] = [
         NodeAction::Reveal,
         NodeAction::Open,
         NodeAction::CopyPath,
@@ -60,6 +68,7 @@ impl NodeAction {
         NodeAction::ZoomToParent,
         NodeAction::Rescan,
         NodeAction::Trash,
+        NodeAction::Delete,
     ];
 
     /// The menu action id.
@@ -72,6 +81,7 @@ impl NodeAction {
             NodeAction::ZoomToParent => "node.zoom-parent",
             NodeAction::Rescan => "node.rescan",
             NodeAction::Trash => "node.trash",
+            NodeAction::Delete => "node.delete",
         }
     }
 
@@ -89,6 +99,7 @@ impl NodeAction {
             NodeAction::ZoomToParent => fa::LEVEL_UP,
             NodeAction::Rescan => fa::REFRESH,
             NodeAction::Trash => fa::TRASH,
+            NodeAction::Delete => fa::TIMES_CIRCLE,
         }
     }
 }
@@ -116,6 +127,7 @@ pub fn label(action: NodeAction, platform: &dyn PlatformServices) -> &'static st
         NodeAction::ZoomToParent => "Zoom to Parent",
         NodeAction::Rescan => "Rescan Folder",
         NodeAction::Trash => "Move to Trash\u{2026}",
+        NodeAction::Delete => "Delete Permanently\u{2026}",
     }
 }
 
@@ -130,7 +142,7 @@ pub struct NodeActions {
 struct Facts {
     live: bool,
     is_dir: bool,
-    /// The scan root (never trashed).
+    /// The scan root (never trashed or deleted).
     is_root: bool,
     skipped: bool,
     has_parent: bool,
@@ -167,8 +179,8 @@ impl NodeActions {
     }
 
     /// Whether `action` applies to `node` (greyed out in menus when not). Refusals that
-    /// need explaining (an inexact name, the scan root for Move to Trash) stay enabled
-    /// and say why when chosen.
+    /// need explaining (an inexact name, the scan root for Move to Trash and Delete
+    /// Permanently) stay enabled and say why when chosen.
     pub fn enabled(&self, node: NodeId, action: NodeAction) -> bool {
         let Some(f) = self.facts(node).filter(|f| f.live) else {
             return false;
@@ -185,7 +197,7 @@ impl NodeActions {
             }
             // Not while a scan is still building the tree. The scan root stays enabled so
             // choosing it explains the refusal.
-            NodeAction::Trash => !self.state.is_scanning(),
+            NodeAction::Trash | NodeAction::Delete => !self.state.is_scanning(),
         }
     }
 
@@ -225,7 +237,8 @@ impl NodeActions {
                 }
             }
             NodeAction::Rescan => self.rescan(node),
-            NodeAction::Trash => self.ask_to_trash(node),
+            NodeAction::Trash => self.ask_to_remove(node, Removal::Trash),
+            NodeAction::Delete => self.ask_to_remove(node, Removal::Delete),
         }
     }
 
@@ -283,33 +296,35 @@ impl NodeActions {
         }
     }
 
-    /// Open the Move to Trash confirmation for `node`, or say why not.
-    fn ask_to_trash(&self, node: NodeId) {
+    /// Open the confirmation of removing `node` (`how`), or say why not.
+    fn ask_to_remove(&self, node: NodeId, how: Removal) {
         let Some(f) = self.facts(node) else {
             return;
         };
         if f.is_root {
-            self.state.notify_error(TRASH_ROOT_MESSAGE);
+            self.state.notify_error(root_message(how));
             return;
         }
         if self.exact_path(node).is_none() {
             return;
         }
-        self.state.request_trash(node);
+        self.state.request_removal(node, how);
     }
 
-    /// The confirmation's "Move to Trash" button: trash the waiting node, then take it out
-    /// of the tree. A failure is reported and the tree is left as it was.
-    pub fn confirm_trash(&self) {
-        let Some(node) = self.state.trash_request() else {
+    /// The confirmation's "Move to Trash" or "Delete Permanently" button: remove the
+    /// waiting node from the disk, then take it out of the tree. A failure is reported and
+    /// the tree is left as it was, except that a folder a delete may have emptied in part
+    /// is rescanned.
+    pub fn confirm_removal(&self) {
+        let Some((node, how)) = self.state.removal_request() else {
             return;
         };
-        self.state.cancel_trash();
+        self.state.cancel_removal();
         let Some(f) = self.facts(node).filter(|f| f.live) else {
             return;
         };
         if f.is_root {
-            self.state.notify_error(TRASH_ROOT_MESSAGE);
+            self.state.notify_error(root_message(how));
             return;
         }
         let Some(path) = self.exact_path(node) else {
@@ -319,19 +334,41 @@ impl NodeActions {
             .state
             .with_result(|r, _| r.tree.name(node).to_string())
             .unwrap_or_default();
-        match self.platform.trash(&path) {
+        let result = match how {
+            Removal::Trash => self.platform.trash(&path),
+            Removal::Delete => self.platform.delete_permanently(&path),
+        };
+        match result {
             Ok(outcome) => {
                 let removed = self.state.remove_node(node);
-                let size = removed.map(|s| s.get(self.state.size_mode())).unwrap_or(0);
-                match outcome {
-                    ActionOutcome::Done => self.state.notify(format!(
-                        "Moved {name} to the Trash ({})",
-                        format_bytes(size)
-                    )),
-                    ActionOutcome::Simulated(_) => self.state.notify_info(SIMULATED_TRASH_MESSAGE),
+                let size =
+                    format_bytes(removed.map(|s| s.get(self.state.size_mode())).unwrap_or(0));
+                match (outcome, how) {
+                    (ActionOutcome::Done, Removal::Trash) => self
+                        .state
+                        .notify(format!("Moved {name} to the Trash ({size})")),
+                    (ActionOutcome::Done, Removal::Delete) => {
+                        self.state.notify(format!("Deleted {name} ({size})"))
+                    }
+                    (ActionOutcome::Simulated(_), _) => {
+                        self.state.notify_info(SIMULATED_TRASH_MESSAGE)
+                    }
                 }
             }
-            Err(err) => self.state.notify_error(err.message),
+            Err(err) => {
+                self.state.notify_error(err.message);
+                if how == Removal::Delete && f.is_dir && self.enabled(node, NodeAction::Rescan) {
+                    self.rescan(node);
+                }
+            }
         }
+    }
+}
+
+/// Why the scan root cannot be removed `how`.
+fn root_message(how: Removal) -> &'static str {
+    match how {
+        Removal::Trash => TRASH_ROOT_MESSAGE,
+        Removal::Delete => DELETE_ROOT_MESSAGE,
     }
 }

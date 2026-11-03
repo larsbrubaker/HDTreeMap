@@ -159,6 +159,9 @@ impl PlatformServices for WebPlatform {
     fn trash(&self, path: &Path) -> ActionResult {
         self.demo.trash(path)
     }
+    fn delete_permanently(&self, path: &Path) -> ActionResult {
+        self.demo.delete_permanently(path)
+    }
     fn open_url(&self, url: &str) -> ActionResult {
         if hdtreemap_open_url(url) {
             Ok(ActionOutcome::Done)

@@ -59,6 +59,8 @@ pub mod fa {
     pub const HOME: char = '\u{f015}';
     /// fa-trash — Move to Trash.
     pub const TRASH: char = '\u{f1f8}';
+    /// fa-times-circle — Delete Permanently.
+    pub const TIMES_CIRCLE: char = '\u{f057}';
     /// fa-power-off — Quit.
     pub const POWER_OFF: char = '\u{f011}';
     /// fa-github — View on GitHub.
@@ -126,6 +128,7 @@ mod tests {
             fa::LEVEL_UP,
             fa::HOME,
             fa::TRASH,
+            fa::TIMES_CIRCLE,
             fa::POWER_OFF,
             fa::GITHUB,
             fa::ERASER,

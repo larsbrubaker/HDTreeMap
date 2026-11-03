@@ -2,11 +2,12 @@
 //! show them, kept in `AppState` so the treemap, the folder tree, the menus and the tests
 //! all reach the same one:
 //!
-//! - **toasts**: transient messages ("Copied path", "Moved X to the Trash", a demo note,
-//!   errors) in agg-gui's [`Toasts`] queue, which the root's `ToastHost` (`ui/mod.rs`)
+//! - **toasts**: transient messages ("Copied path", "Moved X to the Trash", "Deleted X", a
+//!   demo note, errors) in agg-gui's [`Toasts`] queue, which the root's `ToastHost` (`ui/mod.rs`)
 //!   paints bottom-right over the map; agg-gui times them out (errors stay up longer);
-//! - the **Move to Trash confirmation**: which node is waiting, and the visibility cell of
-//!   its `ModalSheet` (`ui/sheets.rs`);
+//! - the **removal confirmation** (Move to Trash or Delete Permanently): which node is
+//!   waiting and how it is to go ([`Removal`]), and the visibility cell of its `ModalSheet`
+//!   (`ui/sheets.rs`);
 //! - the **About** sheet's visibility;
 //! - a pending **context menu** request (where, for which node), taken by the context
 //!   menu host (`ui/context_menu.rs`) on its next layout;
@@ -26,6 +27,15 @@ use crate::model::NodeId;
 /// Most toasts shown at once (older ones fade out when a new one would exceed it).
 pub const MAX_TOASTS: usize = 4;
 
+/// How a confirmed removal takes an item off the disk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Removal {
+    /// Move to Trash: it can be restored from the Trash / Recycle Bin.
+    Trash,
+    /// Delete Permanently: gone for good, skipping the trash.
+    Delete,
+}
+
 /// A right click asked for a context menu.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ContextRequest {
@@ -38,13 +48,13 @@ pub struct ContextRequest {
 /// See the module docs.
 pub(super) struct Notices {
     toasts: Toasts,
-    trash_request: Cell<Option<NodeId>>,
-    trash_sheet: Rc<Cell<bool>>,
+    removal_request: Cell<Option<(NodeId, Removal)>>,
+    removal_sheet: Rc<Cell<bool>>,
     about_sheet: Rc<Cell<bool>>,
     context: Cell<Option<ContextRequest>>,
     quit: Cell<bool>,
     native_menu: Cell<bool>,
-    /// Bumped when the trash request changes (the sheet's content rebuilds on it).
+    /// Bumped when the removal request changes (the sheet's content rebuilds on it).
     sheet_version: Cell<u64>,
 }
 
@@ -52,8 +62,8 @@ impl Default for Notices {
     fn default() -> Self {
         Self {
             toasts: Toasts::new().with_max_visible(MAX_TOASTS),
-            trash_request: Cell::new(None),
-            trash_sheet: Rc::new(Cell::new(false)),
+            removal_request: Cell::new(None),
+            removal_sheet: Rc::new(Cell::new(false)),
             about_sheet: Rc::new(Cell::new(false)),
             context: Cell::new(None),
             quit: Cell::new(false),
@@ -88,36 +98,37 @@ impl AppState {
         self.notices().toasts.clone()
     }
 
-    /// Ask to confirm moving `node` to the trash: the confirmation sheet opens for it.
-    pub fn request_trash(&self, node: NodeId) {
+    /// Ask to confirm removing `node` (`how`: to the trash or for good): the confirmation
+    /// sheet opens for it.
+    pub fn request_removal(&self, node: NodeId, how: Removal) {
         let notices = self.notices();
-        notices.trash_request.set(Some(node));
+        notices.removal_request.set(Some((node, how)));
         notices
             .sheet_version
             .set(notices.sheet_version.get().wrapping_add(1));
-        notices.trash_sheet.set(true);
+        notices.removal_sheet.set(true);
         agg_gui::animation::request_draw();
     }
 
-    /// The node waiting for the trash confirmation.
-    pub fn trash_request(&self) -> Option<NodeId> {
-        self.notices().trash_request.get()
+    /// The node waiting for the removal confirmation, and how it is to go.
+    pub fn removal_request(&self) -> Option<(NodeId, Removal)> {
+        self.notices().removal_request.get()
     }
 
-    /// Close the trash confirmation without doing anything.
-    pub fn cancel_trash(&self) {
+    /// Close the removal confirmation without doing anything.
+    pub fn cancel_removal(&self) {
         let notices = self.notices();
-        notices.trash_request.set(None);
-        notices.trash_sheet.set(false);
+        notices.removal_request.set(None);
+        notices.removal_sheet.set(false);
         agg_gui::animation::request_draw();
     }
 
-    /// The trash confirmation sheet's visibility cell.
-    pub fn trash_sheet(&self) -> Rc<Cell<bool>> {
-        Rc::clone(&self.notices().trash_sheet)
+    /// The removal confirmation sheet's visibility cell.
+    pub fn removal_sheet(&self) -> Rc<Cell<bool>> {
+        Rc::clone(&self.notices().removal_sheet)
     }
 
-    /// Changes whenever a new trash confirmation is requested.
+    /// Changes whenever a new removal confirmation is requested.
     pub fn sheet_version(&self) -> u64 {
         self.notices().sheet_version.get()
     }

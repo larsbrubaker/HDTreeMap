@@ -82,7 +82,11 @@ fn the_bar_lists_the_menus_and_their_items() {
     );
     assert_eq!(
         labels(&spec[1].items),
-        vec!["Copy Path", "Move to Trash\u{2026}"]
+        vec![
+            "Copy Path",
+            "Move to Trash\u{2026}",
+            "Delete Permanently\u{2026}"
+        ]
     );
     assert_eq!(
         labels(&spec[2].items),

@@ -1,6 +1,6 @@
 //! Unit tests for the edits after a scan (`state/edits.rs`: Move to Trash's removal,
 //! Rescan Folder's splice) and the transient UI state (`state/notices.rs`: toasts, the
-//! trash confirmation).
+//! removal confirmation).
 
 use std::time::Duration;
 
@@ -132,15 +132,20 @@ fn toasts_keep_the_latest_few() {
 }
 
 #[test]
-fn trash_requests_open_and_cancel_the_sheet() {
+fn removal_requests_open_and_cancel_the_sheet() {
     let state = AppState::new();
-    let sheet = state.trash_sheet();
+    let sheet = state.removal_sheet();
     let v = state.sheet_version();
-    state.request_trash(NodeId(3));
+    state.request_removal(NodeId(3), Removal::Trash);
     assert!(sheet.get());
-    assert_eq!(state.trash_request(), Some(NodeId(3)));
+    assert_eq!(state.removal_request(), Some((NodeId(3), Removal::Trash)));
     assert!(state.sheet_version() > v);
-    state.cancel_trash();
+    state.cancel_removal();
     assert!(!sheet.get());
-    assert_eq!(state.trash_request(), None);
+    assert_eq!(state.removal_request(), None);
+    // A delete request rebuilds the sheet for its own wording.
+    let v = state.sheet_version();
+    state.request_removal(NodeId(4), Removal::Delete);
+    assert_eq!(state.removal_request(), Some((NodeId(4), Removal::Delete)));
+    assert!(state.sheet_version() > v);
 }

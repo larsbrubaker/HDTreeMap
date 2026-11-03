@@ -7,6 +7,7 @@
 //! | Reveal | `open -R` | `explorer /select,` | FileManager1 `ShowItems` over `dbus-send`, else `xdg-open` on the parent |
 //! | Open | opener | opener | opener |
 //! | Trash | trash | trash | trash |
+//! | Delete permanently | `std::fs` ([`delete_path`]) | same | same |
 //! | Open URL | opener (browser) | opener | opener |
 //! | Scan | `FsScanner` (jwalk, worker thread) | same | same |
 //!
@@ -93,6 +94,14 @@ impl PlatformServices for NativePlatform {
                     "Could not move {} to the trash: {err}",
                     path.display()
                 ))
+            })
+    }
+
+    fn delete_permanently(&self, path: &Path) -> ActionResult {
+        delete_path(path)
+            .map(|()| ActionOutcome::Done)
+            .map_err(|err| {
+                PlatformError::new(format!("Could not delete {}: {err}", path.display()))
             })
     }
 
@@ -230,9 +239,95 @@ fn file_uri(path: &Path) -> String {
     uri
 }
 
+/// Delete `path` for good: a folder with everything in it (`remove_dir_all`, which removes
+/// links inside it without following them), a file, or a link itself (never its target).
+/// On Windows a link to a folder (a symlink or junction) is a directory entry, removed with
+/// `remove_dir`.
+fn delete_path(path: &Path) -> std::io::Result<()> {
+    let meta = std::fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return std::fs::remove_file(path).or_else(|err| {
+            if cfg!(windows) {
+                std::fs::remove_dir(path)
+            } else {
+                Err(err)
+            }
+        });
+    }
+    if meta.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delete_permanently_removes_files_and_whole_folders() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let file = dir.path().join("a.bin");
+        std::fs::write(&file, b"data").expect("write");
+        let folder = dir.path().join("folder");
+        std::fs::create_dir_all(folder.join("nested/deeper")).expect("mkdir");
+        std::fs::write(folder.join("nested/deeper/b.txt"), b"b").expect("write");
+        std::fs::write(folder.join("c.txt"), b"c").expect("write");
+
+        assert_eq!(
+            NativePlatform.delete_permanently(&file),
+            Ok(ActionOutcome::Done)
+        );
+        assert!(!file.exists());
+        assert_eq!(
+            NativePlatform.delete_permanently(&folder),
+            Ok(ActionOutcome::Done)
+        );
+        assert!(!folder.exists());
+        assert!(dir.path().exists(), "only what was asked for goes");
+    }
+
+    #[test]
+    fn delete_permanently_reports_what_failed() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let missing = dir.path().join("missing");
+        let err = NativePlatform
+            .delete_permanently(&missing)
+            .expect_err("nothing to delete");
+        assert!(
+            err.message.starts_with("Could not delete ") && err.message.contains("missing"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn delete_permanently_never_follows_links() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&outside).expect("mkdir");
+        std::fs::write(outside.join("keep.txt"), b"keep").expect("write");
+        // A link to the folder, and a folder holding another link to it.
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&outside, &link).expect("symlink");
+        let holder = dir.path().join("holder");
+        std::fs::create_dir(&holder).expect("mkdir");
+        std::os::unix::fs::symlink(&outside, holder.join("inner")).expect("symlink");
+
+        assert_eq!(
+            NativePlatform.delete_permanently(&link),
+            Ok(ActionOutcome::Done)
+        );
+        assert!(std::fs::symlink_metadata(&link).is_err(), "the link went");
+        assert_eq!(
+            NativePlatform.delete_permanently(&holder),
+            Ok(ActionOutcome::Done)
+        );
+        assert!(!holder.exists());
+        assert!(outside.join("keep.txt").exists(), "the target stays");
+    }
 
     #[test]
     fn file_uris_escape_spaces_and_non_ascii() {

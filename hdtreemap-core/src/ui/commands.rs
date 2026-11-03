@@ -37,6 +37,8 @@ pub enum Command {
     CopyPath,
     /// Edit ▸ Move to Trash… the selection.
     Trash,
+    /// Edit ▸ Delete Permanently… the selection.
+    Delete,
     /// View ▸ Size Mode.
     SizeMode(SizeMode),
     /// View ▸ Shading ▸ Cushion, Flat, Bevel or City.
@@ -70,6 +72,7 @@ impl Command {
             Command::Quit => "file.quit".into(),
             Command::CopyPath => "edit.copy-path".into(),
             Command::Trash => "edit.trash".into(),
+            Command::Delete => "edit.delete".into(),
             Command::SizeMode(SizeMode::Allocated) => "view.size.allocated".into(),
             Command::SizeMode(SizeMode::Apparent) => "view.size.apparent".into(),
             Command::Shading(shading) => format!("view.shading.{}", shading.key()),
@@ -103,6 +106,7 @@ impl Command {
             Command::Quit,
             Command::CopyPath,
             Command::Trash,
+            Command::Delete,
             Command::SizeMode(SizeMode::Allocated),
             Command::SizeMode(SizeMode::Apparent),
             Command::ColorBy(ColorBy::Extension),
@@ -144,7 +148,7 @@ impl Commands {
         &self.platform
     }
 
-    /// The node actions (context menus, the trash confirmation).
+    /// The node actions (context menus, the removal confirmation).
     pub fn nodes(&self) -> &NodeActions {
         &self.nodes
     }
@@ -202,6 +206,9 @@ impl Commands {
             Command::Trash => self
                 .selection()
                 .is_some_and(|n| self.nodes.enabled(n, NodeAction::Trash)),
+            Command::Delete => self
+                .selection()
+                .is_some_and(|n| self.nodes.enabled(n, NodeAction::Delete)),
             Command::SizeMode(_) | Command::Shading(_) | Command::ColorBy(_) => self.has_map(),
             Command::ZoomIn => self.zoom_in_target().is_some(),
             Command::ZoomOut | Command::ZoomRoot => self.zoomed_in(),
@@ -248,6 +255,7 @@ impl Commands {
             Command::Quit => state.request_quit(),
             Command::CopyPath => self.on_selection(NodeAction::CopyPath),
             Command::Trash => self.on_selection(NodeAction::Trash),
+            Command::Delete => self.on_selection(NodeAction::Delete),
             Command::SizeMode(mode) => state.set_size_mode(mode),
             Command::ColorBy(by) => state.set_color_by(by),
             Command::Shading(shading) => state.set_shading(shading),

@@ -35,7 +35,7 @@ hdtreemap-core/     rlib: everything testable, no platform code
   src/format.rs       human-readable sizes
   src/icon.rs         the app icon, drawn by the treemap layout + rasteriser (window icon,
                       release assets)
-  src/platform.rs     PlatformServices trait (volumes, picker, reveal/open/trash, open_url,
+  src/platform.rs     PlatformServices trait (volumes, picker, reveal/open/trash/delete, open_url,
                       scan_source), VolumeInfo, volume-list cleanup (dedupe by VolumeKey)
   src/platform/demo.rs  DemoPlatform: the web demo's simulated drives
   src/platform/mountinfo.rs  Linux /proc/self/mountinfo: parse, mounts to skip (pure)
@@ -62,16 +62,16 @@ hdtreemap-core/     rlib: everything testable, no platform code
                       theme.rs: theme choice + reported OS appearance, theme_version;
                       derived.rs: shared palette and zoom-root ExtTable; volumes.rs: cached
                       volume list; edits.rs: remove_node, folder rescan + splice;
-                      notices.rs: the agg-gui Toasts queue, trash/About sheets, context-menu requests, quit
+                      notices.rs: the agg-gui Toasts queue, removal (trash/delete) and About sheets, context-menu requests, quit
   src/ui/             widgets. mod.rs: root Stack (menu bar + screen, overlays);
                       start_screen (drives, Recent), main_view (toolbar, breadcrumb,
                       scan_strip while scanning, splitters, status bar; shown live from
                       the start of a scan), treemap_view/ (custom TreemapView;
                       geometry.rs raster size, highlight.rs), folder_tree/ (TreeView wrapper, rows.rs lazy
                       rows), ext_legend.rs (Table), describe.rs; commands.rs (menu
-                      commands), node_actions.rs (reveal/open/copy/zoom/rescan/trash),
+                      commands), node_actions.rs (reveal/open/copy/zoom/rescan/trash/delete),
                       menus.rs (menu spec, in-window MenuBar, shortcuts), context_menu.rs
-                      (PopupMenu host), sheets.rs (trash confirm, About); the root
+                      (PopupMenu host), sheets.rs (trash/delete confirm, About); the root
                       sits in agg-gui's ToastHost (toasts from AppState::notify)
   tests/              headless UI tests (common/ harness with a recording FakePlatform),
                       scanner tests, live_map, color_by, actions/menus tests,
@@ -134,7 +134,7 @@ wasm-pack build hdtreemap-wasm --target web --out-dir ../demo/public/pkg --no-ty
 `HDTREEMAP_SCREENSHOT=out.png cargo run -p hdtreemap-native` captures a frame and exits;
 `HDTREEMAP_SCREENSHOT_SHOW=context-menu|trash|menu|about|color-folder|toast|hover` opens that UI first
 (`HDTREEMAP_SCREENSHOT_AT=fx,fy` places the hover; with
-`HDTREEMAP_IN_WINDOW_MENU=1` for the in-window bar on macOS). Never confirm a trash on real
+`HDTREEMAP_IN_WINDOW_MENU=1` for the in-window bar on macOS). Never confirm a trash or a delete on real
 files while testing: point it at a temporary folder.
 `HDTREEMAP_STATS=1` prints treemap layout / raster times, per-frame layout+paint time,
 live ticks, and a scan's slowest folders (`?stats` on the web, to the console).
